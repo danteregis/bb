@@ -70,6 +70,7 @@ describe("paginateTimelineRows", () => {
     const assistant = assistantRow(2);
     const page = paginateTimelineRows({
       hasOlderSegments: false,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 0,
@@ -91,6 +92,7 @@ describe("paginateTimelineRows", () => {
 
     const page = paginateTimelineRows({
       hasOlderSegments: false,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 0,
@@ -135,6 +137,7 @@ describe("paginateTimelineRows", () => {
 
     const page = paginateTimelineRows({
       hasOlderSegments: true,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 13,
@@ -171,6 +174,7 @@ describe("paginateTimelineRows", () => {
 
     const page = paginateTimelineRows({
       hasOlderSegments: true,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 20,
@@ -195,6 +199,7 @@ describe("paginateTimelineRows", () => {
       const latest = userRow({ id: "latest", seq: 20, text: "b".repeat(500) });
       const page = paginateTimelineRows({
         hasOlderSegments: true,
+        omittedTurnSequenceEnd: null,
         maxLeaves: 1_000,
         maxBytes,
         ownedSequenceStart: 20,
@@ -260,6 +265,7 @@ describe("paginateTimelineRows", () => {
 
     const page = paginateTimelineRows({
       hasOlderSegments: true,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 20,
@@ -296,6 +302,7 @@ describe("paginateTimelineRows", () => {
 
     const page = paginateTimelineRows({
       hasOlderSegments: false,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 2,
       maxBytes: 1_000_000,
       ownedSequenceStart: 1,
@@ -329,6 +336,7 @@ describe("paginateTimelineRows", () => {
   it("continues a content cut at the next window bound, not a projected row", () => {
     const page = paginateTimelineRows({
       hasOlderSegments: false,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1,
       maxBytes: 1_000_000,
       ownedSequenceStart: 10,
@@ -379,6 +387,7 @@ describe("paginateTimelineRows", () => {
       const tail = assistantRow(5);
       const page = paginateTimelineRows({
         hasOlderSegments: false,
+        omittedTurnSequenceEnd: null,
         maxLeaves,
         maxBytes,
         ownedSequenceStart: 1,
@@ -406,6 +415,7 @@ describe("paginateTimelineRows", () => {
   it("reports owned groups a budget cut left out of the page", () => {
     const page = paginateTimelineRows({
       hasOlderSegments: false,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1,
       maxBytes: 300,
       ownedSequenceStart: 1,
@@ -449,6 +459,7 @@ describe("paginateTimelineRows", () => {
 
     const page = paginateTimelineRows({
       hasOlderSegments: false,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 0,
@@ -468,6 +479,7 @@ describe("paginateTimelineRows", () => {
 
     const older = paginateTimelineRows({
       hasOlderSegments: false,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 0,
@@ -487,6 +499,7 @@ describe("paginateTimelineRows", () => {
   it("owns rows by the selected window, whatever row shape they project to", () => {
     const page = paginateTimelineRows({
       hasOlderSegments: true,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 15,
@@ -515,6 +528,7 @@ describe("paginateTimelineRows", () => {
     const notice = assistantRow(13093);
     const page = paginateTimelineRows({
       hasOlderSegments: true,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 12545,
@@ -551,6 +565,7 @@ describe("paginateTimelineRows", () => {
   it("selects the newest groups when the window holds more than the limit", () => {
     const page = paginateTimelineRows({
       hasOlderSegments: false,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 1,
@@ -577,6 +592,7 @@ describe("paginateTimelineRows", () => {
   it("hands back the window start when the window projects no owned rows", () => {
     const page = paginateTimelineRows({
       hasOlderSegments: true,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 100,
@@ -595,6 +611,7 @@ describe("paginateTimelineRows", () => {
 
     const last = paginateTimelineRows({
       hasOlderSegments: false,
+      omittedTurnSequenceEnd: null,
       maxLeaves: 1_000,
       maxBytes: 1_000_000,
       ownedSequenceStart: 0,
