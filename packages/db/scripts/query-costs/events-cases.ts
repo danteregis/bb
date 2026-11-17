@@ -31,7 +31,7 @@ import {
   findStoredEventRow,
   findStoredTimelineWindowByteBudgetFloor,
   findTimelineWindowBudgetFloorSequence,
-  findTimelineWindowCutSequence,
+  findTimelineWindowCut,
   getActiveStoredTurnId,
   getContextWindowUsagePruningBoundarySequence,
   getFirstParentedTimelineBoundarySequence,
@@ -65,7 +65,6 @@ import {
   isStoredTurnProviderCompactionRunning,
   insertEvents,
   isTimelineCursorSequencePresent,
-  isTimelineEventInCompletedTurn,
   listActiveBackgroundTaskCountsByThreadIds,
   listAppendedEventRows,
   listCommandItemDataByItemIds,
@@ -109,7 +108,6 @@ import {
   listTimelineInterruptionRows,
   listTimelineOrderingContext,
   listTimelineRootWindowTurnIds,
-  listTimelineTurnEventRefsBefore,
   listTimelineWindowHintsDescending,
   listTodoSnapshotEventRowsForThread,
   pruneContextWindowUsageEventsInTransaction,
@@ -474,11 +472,11 @@ function liveWindowGridSequence(): number {
 
 function liveWindowCut(db: DbConnection, fixture: HistoryFixture): number {
   return (
-    findTimelineWindowCutSequence(db, {
+    findTimelineWindowCut(db, {
       budgetFloorSequence: liveWindowStart,
       sequence: liveWindowGridSequence(),
       threadId: fixture.liveTurn.threadId,
-    }) ?? liveWindowGridSequence()
+    })?.sequence ?? liveWindowGridSequence()
   );
 }
 
@@ -730,18 +728,7 @@ const LIVE_TURN_COST_CASES: readonly QueryCostCase[] = [
       }),
   },
   {
-    name: `${EVENTS}#isTimelineEventInCompletedTurn`,
-    variant: LIVE_TURN,
-    prepare: selectLiveWindowStart,
-    run: (db, fixture) =>
-      isTimelineEventInCompletedTurn(db, {
-        maxSeq: fixture.liveTurn.latestSequence,
-        sequence: liveWindowStart,
-        threadId: fixture.liveTurn.threadId,
-      }),
-  },
-  {
-    name: `${EVENTS}#findTimelineWindowCutSequence`,
+    name: `${EVENTS}#findTimelineWindowCut`,
     variant: LIVE_TURN,
     prepare: selectLiveWindowStart,
     run: liveWindowCut,
@@ -754,22 +741,8 @@ const LIVE_TURN_COST_CASES: readonly QueryCostCase[] = [
       countTimelineTurnEventsBeforeCut(db, {
         cutSequence: liveCutSequence,
         epochSequenceStart: 0,
-        sequence: liveWindowStart,
         threadId: fixture.liveTurn.threadId,
-      }),
-  },
-  {
-    name: `${EVENTS}#listTimelineTurnEventRefsBefore`,
-    variant: LIVE_TURN,
-    prepare: selectLiveWindowCut,
-    run: (db, fixture) =>
-      listTimelineTurnEventRefsBefore(db, {
-        beforeSequence: liveCutSequence,
-        excludeDiagnosticEvents: true,
-        excludedTypes: TIMELINE_EXCLUDED_EVENT_TYPES,
-        limit: 16,
-        sequenceStart: fixture.liveTurn.requestSequence,
-        threadId: fixture.liveTurn.threadId,
+        turnId: fixture.liveTurn.turnId,
       }),
   },
   {

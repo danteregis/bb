@@ -47,7 +47,6 @@ export interface PaginateTimelineRowsArgs {
   ownedSequenceStart: number;
   ownedSequenceEnd: number;
   hasOlderSegments: boolean;
-  omittedTurnSequenceEnd: number | null;
   page: ThreadTimelinePageRequest;
   rows: readonly TimelineRow[];
 }
@@ -178,12 +177,7 @@ export function paginateTimelineRows(
         .filter((row) => !reported.includes(row))
         .reduce<number | null>(
           (sourceSeqEnd, row) => Math.max(sourceSeqEnd ?? 0, row.sourceSeqEnd),
-          args.omittedTurnSequenceEnd === null
-            ? omittedContentSourceSeqEnd
-            : Math.max(
-                omittedContentSourceSeqEnd ?? 0,
-                args.omittedTurnSequenceEnd,
-              ),
+          omittedContentSourceSeqEnd,
         ),
       ...(reported.length > 0 ? { olderRowUpdates: updates } : {}),
     };

@@ -90,10 +90,8 @@ import {
   listStoredTimelineItemEventRows,
   listStoredItemStartSequencesBefore,
   listTimelineTurnItemsOpenBefore,
-  listTimelineTurnEventRefsBefore,
   countTimelineTurnEventsOutsideWindow,
   listTimelineCompletedTurnIds,
-  listTimelineTurnFirstSequences,
   listTimelineTurnIdsWithEventsBefore,
   listStoredTimelineTurnEventRows,
   listStoredTimelineTurnContextRows,
@@ -150,7 +148,6 @@ import {
   rememberDecodedLatestTimelineSelection,
   rememberLatestTimelineSelection,
   TimelineSelectionTrimFallback,
-  isTurnContextRow,
   type LatestTimelineSelectionMemoArgs,
   type TimelineSelectionRowSource,
   type StandardTimelineEventRowSelection,
@@ -616,139 +613,6 @@ function databaseTimelineRowSource(
 }
 
 const SMALL_TURN_OUTSIDE_EVENTS = 256;
-const OMITTED_TURN_EVENT_SCAN_FIRST_PAGE_SIZE = 16;
-const OMITTED_TURN_EVENT_SCAN_MAX_PAGE_SIZE = 1_024;
-
-function latestWindowedTurnRowSequenceBefore(
-  db: DbConnection,
-  args: {
-    epochSequenceStart: number;
-    excludeDiagnosticEvents: boolean;
-    maxInlineOutputChars: InlineOutputCharLimit;
-    rows: readonly StoredEventRow[];
-    sequenceStart: number;
-    threadId: string;
-    windowedTurnIds: ReadonlySet<string>;
-  },
-): number | null {
-  if (args.windowedTurnIds.size === 0) return null;
-  const items = new Map<
-    string,
-    { delegating: boolean; parent: string | null }
-  >();
-  for (const row of args.rows) {
-    if (row.itemId === null) continue;
-    const item = items.get(row.itemId);
-    if (item === undefined) {
-      items.set(row.itemId, {
-        delegating: isStoredDelegatingItemRow(row),
-        parent: getStoredEventParentToolCallId(row) ?? null,
-      });
-    } else if (isStoredDelegatingItemRow(row)) {
-      item.delegating = true;
-    }
-  }
-  const itemOf = (itemId: string) => {
-    let item = items.get(itemId);
-    if (item === undefined) {
-      const [row] = listStoredDelegatingItemRowsByItemIds(db, {
-        itemIds: [itemId],
-        maxInlineOutputChars: args.maxInlineOutputChars,
-        threadId: args.threadId,
-      });
-      item = {
-        delegating: row !== undefined,
-        parent:
-          row === undefined
-            ? null
-            : (getStoredEventParentToolCallId(row) ?? null),
-      };
-      items.set(itemId, item);
-    }
-    return item;
-  };
-  const nestingParent = (parentToolCallId: string | null): string | null =>
-    parentToolCallId !== null &&
-    parentToolCallId !== "" &&
-    itemOf(parentToolCallId).delegating
-      ? parentToolCallId
-      : null;
-  const reaching = new Set<string>();
-  const markReaching = (itemId: string | null) => {
-    while (itemId !== null && !reaching.has(itemId)) {
-      reaching.add(itemId);
-      itemId = nestingParent(itemOf(itemId).parent);
-    }
-  };
-  for (const row of args.rows) {
-    if (row.sequence < args.sequenceStart) continue;
-    markReaching(row.itemId);
-    markReaching(nestingParent(getStoredEventParentToolCallId(row) ?? null));
-  }
-  const rendersOutsideWindow = (
-    itemId: string | null,
-    parentToolCallId: string | null,
-  ): boolean => {
-    if (itemId !== null && reaching.has(itemId)) return false;
-    if (parentToolCallId === null || parentToolCallId === "") return true;
-    const visited = new Set<string>();
-    let parent = nestingParent(parentToolCallId);
-    if (parent === null) return false;
-    while (parent !== null && !visited.has(parent)) {
-      if (reaching.has(parent)) return false;
-      visited.add(parent);
-      parent = nestingParent(itemOf(parent).parent);
-    }
-    return true;
-  };
-  let scanStart = args.epochSequenceStart;
-  let beforeSequence = args.sequenceStart;
-  let limit = OMITTED_TURN_EVENT_SCAN_FIRST_PAGE_SIZE;
-  for (let page = 0; ; page += 1) {
-    if (page === 1) {
-      scanStart = Math.max(
-        scanStart,
-        Math.min(
-          ...listTimelineTurnFirstSequences(db, {
-            epochSequenceStart: args.epochSequenceStart,
-            maxSeq: args.sequenceStart - 1,
-            threadId: args.threadId,
-            turnIds: [...args.windowedTurnIds],
-          }).values(),
-        ),
-      );
-    }
-    const refs = listTimelineTurnEventRefsBefore(db, {
-      beforeSequence,
-      excludeDiagnosticEvents: args.excludeDiagnosticEvents,
-      excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
-      limit,
-      sequenceStart: scanStart,
-      threadId: args.threadId,
-    });
-    for (const ref of refs) {
-      if (
-        args.windowedTurnIds.has(ref.turnId) &&
-        !isTurnContextRow(ref) &&
-        rendersOutsideWindow(ref.itemId, ref.parentToolCallId)
-      ) {
-        return ref.sequence;
-      }
-    }
-    if (refs.length < limit) return null;
-    beforeSequence = refs[refs.length - 1]!.sequence;
-    limit = Math.min(limit * 4, OMITTED_TURN_EVENT_SCAN_MAX_PAGE_SIZE);
-  }
-}
-
-function latestOmittedTurnRowSequence(
-  db: DbConnection,
-  args: Parameters<typeof latestWindowedTurnRowSequenceBefore>[1],
-): number | null {
-  if (args.sequenceStart <= args.epochSequenceStart) return null;
-  return latestWindowedTurnRowSequenceBefore(db, args);
-}
-
 interface WindowedTurnItemRowsArgs {
   closedItemKeys: Set<string>;
   epochSequenceStart: number;
@@ -1603,16 +1467,6 @@ function selectStandardTimelineEventRows(
   const visibleSequences = new Set(
     [...contextRows, ...rows].map((row) => row.sequence),
   );
-  const selectionRows = ensureTimelineWindowTurnStartedRows(db, {
-    threadId: thread.id,
-    rows: mergeStoredEventRowsById([
-      ...interruptionRows,
-      ...terminalContext,
-      ...contextRows,
-      ...requestedRows,
-      ...rows,
-    ]),
-  });
   return {
     budgetFloorSequence: budgetFloor,
     hints,
@@ -1628,18 +1482,18 @@ function selectStandardTimelineEventRows(
       ownedSequenceStart: sequenceStart,
       ownedSequenceEnd: beforeSequence,
       hasOlderSegments: hasOlder,
-      omittedTurnSequenceEnd: latestOmittedTurnRowSequence(db, {
-        epochSequenceStart,
-        excludeDiagnosticEvents,
-        maxInlineOutputChars,
-        rows: selectionRows,
-        sequenceStart,
-        threadId: thread.id,
-        windowedTurnIds: windowedTurns,
-      }),
       paginationPage:
         contentCursor === undefined ? page : { ...page, segmentLimit: 1 },
-      rows: selectionRows,
+      rows: ensureTimelineWindowTurnStartedRows(db, {
+        threadId: thread.id,
+        rows: mergeStoredEventRowsById([
+          ...interruptionRows,
+          ...terminalContext,
+          ...contextRows,
+          ...requestedRows,
+          ...rows,
+        ]),
+      }),
       strategy:
         !hasOlder && page.kind === "latest" ? "full" : "standard-window",
     },
@@ -1998,7 +1852,6 @@ function buildThreadTimelineInternal(
         ownedSequenceStart: eventSelection.ownedSequenceStart,
         ownedSequenceEnd: eventSelection.ownedSequenceEnd,
         hasOlderSegments: eventSelection.hasOlderSegments,
-        omittedTurnSequenceEnd: eventSelection.omittedTurnSequenceEnd,
         page: eventSelection.paginationPage,
         rows: pageableTimelineRows,
       }),

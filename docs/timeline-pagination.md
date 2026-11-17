@@ -36,11 +36,12 @@ initial event budget.
 When no visible segment start fits the event budget inside a running turn, the
 window starts on a grid of half the event budget at or below the budget floor,
 moved back to the first event of the item the grid lands in. The cut is always
-a request, turn or item lifecycle event, which pruning never deletes, so an
-older cursor anchored on it stays valid. A long running turn is then paged in windows of one to two budgets, and the latest window
-start moves only once per half budget of appended events. The grid is not used
-when the turn has at most one budget of events before the cut, or inside a
-finished turn, so pages over finished history keep their boundaries.
+a turn-scoped request, turn or item lifecycle event, which pruning never
+deletes, so an older cursor anchored on it stays valid. A long running turn is
+then paged in windows of one to two budgets, and the latest window start moves
+only once per half budget of appended events. The grid is not used when the
+cut's turn has finished or has at most one budget of events before the cut, so
+pages over finished history keep their boundaries.
 
 A page reads a turn that starts inside its window, or has at most 256 events
 outside it, whole. Otherwise a turn whose rows render flat, meaning a running
@@ -74,13 +75,12 @@ and display surface. A walk excludes subsequent appends. Earlier events can
 change grouping even after a turn completed. `timelinePage.olderRowsSourceSeqEnd`
 is the greatest `sourceSeqEnd` among rows the snapshot projected before the
 page's returned rows but did not return: older conversation groups, and the
-leaves a content cut omitted from the page's oldest group. A page that reads a
-turn only in part reports the value a whole read of the turn would: it adds
-the turn's latest event before the window that is not a context event and whose
-row does not reach into the window. A row reaches the window through its own
-events or through a delegation it is nested in; an event whose parent does not
-nest it, such as a background task a command launched, has no row of its own.
-It is `null` when the snapshot projected no such rows. When a new latest
+leaves a content cut omitted from the page's oldest group. It is `null` when
+the snapshot projected no such rows. A page that reads a turn only in part does
+not project that turn's rows that end before the window, so its value can be
+lower than a whole read's below the window start. The merge treats every loaded
+row that ends before the window start as older history either way, so only the
+value at or after the window start affects it. When a new latest
 snapshot's window reaches the loaded tip and this value does not exceed it,
 `mergeLoadedTimelineWithLatest` keeps loaded older pages and replaces the rows
 the latest page covers, so streaming does not unload history. Otherwise a later event changed a row the

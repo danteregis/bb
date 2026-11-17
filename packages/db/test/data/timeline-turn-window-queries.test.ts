@@ -7,7 +7,6 @@ import {
   listStoredTimelineItemEventRows,
   listStoredTimelineTurnContextRows,
   listTimelineCompletedTurnIds,
-  listTimelineTurnFirstSequences,
   listTimelineTurnIdsWithEventsBefore,
   listTimelineTurnItemsOpenBefore,
 } from "../../src/data/events.js";
@@ -113,19 +112,6 @@ it("reads turn windows, item starts, open items and completed turns for id lists
       })),
     }).map((row) => row.sequence),
   ).toEqual([2, 3, 5, 6, 7]);
-  expect(
-    listTimelineTurnFirstSequences(db, {
-      epochSequenceStart: 0,
-      maxSeq: 7,
-      threadId,
-      turnIds,
-    }),
-  ).toEqual(
-    new Map([
-      ["first-turn", 1],
-      ["last-turn", 4],
-    ]),
-  );
   expect(
     countTimelineTurnEventsOutsideWindow(db, {
       beforeSequence: 6,

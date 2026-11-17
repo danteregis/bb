@@ -23,8 +23,7 @@ import {
   listStoredTimelineWindowEventRows,
   listStoredTurnRejectedRowsByClientRequestIds,
   listStoredTurnStartedRowsByTurnIdsUpToSequence,
-  findTimelineWindowCutSequence,
-  isTimelineEventInCompletedTurn,
+  findTimelineWindowCut,
   countTimelineTurnEventsBeforeCut,
   scopedItemRefKey,
   selectAppendedTimelineWindowRows,
@@ -49,7 +48,6 @@ export interface TimelineEventRowSelection {
   ownedSequenceStart: number;
   ownedSequenceEnd: number;
   hasOlderSegments: boolean;
-  omittedTurnSequenceEnd: number | null;
   paginationPage: ThreadTimelinePageRequest;
   rows: StoredEventRow[];
   strategy: ThreadTimelineEventSelectionStrategy;
@@ -286,30 +284,31 @@ function splitRunningTurnAt(
   gridSequence: number,
   budgetFloorSequence: number,
 ): number | null {
-  if (
-    isTimelineEventInCompletedTurn(db, {
-      maxSeq: args.maxSeq,
-      sequence: budgetFloorSequence,
-      threadId: args.threadId,
-    })
-  ) {
-    return null;
-  }
-  const cut = findTimelineWindowCutSequence(db, {
+  const cut = findTimelineWindowCut(db, {
     budgetFloorSequence,
     sequence: gridSequence,
     threadId: args.threadId,
   });
   if (cut === null) return null;
-  const eventsBeforeCut = countTimelineTurnEventsBeforeCut(db, {
-    cutSequence: cut,
+  const turnQuery = {
     epochSequenceStart: args.epochSequenceStart,
-    sequence: budgetFloorSequence,
     threadId: args.threadId,
+  };
+  if (
+    listTimelineCompletedTurnIds(db, {
+      ...turnQuery,
+      maxSeq: args.maxSeq,
+      turnIds: [cut.turnId],
+    }).size > 0
+  ) {
+    return null;
+  }
+  const eventsBeforeCut = countTimelineTurnEventsBeforeCut(db, {
+    ...turnQuery,
+    cutSequence: cut.sequence,
+    turnId: cut.turnId,
   });
-  return eventsBeforeCut !== null && eventsBeforeCut <= args.eventBudget
-    ? null
-    : cut;
+  return eventsBeforeCut <= args.eventBudget ? null : cut.sequence;
 }
 
 function getSelectionMemo(db: DbConnection): TimelineSelectionMemo {
@@ -699,7 +698,7 @@ const TURN_CONTEXT_ROW_TYPES: ReadonlySet<ThreadEventType> = new Set([
   "provider/unhandled",
 ]);
 
-export function isTurnContextRow(
+function isTurnContextRow(
   row: Pick<StoredEventRow, "itemKind" | "type">,
 ): boolean {
   return (

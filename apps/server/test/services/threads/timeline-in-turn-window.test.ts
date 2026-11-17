@@ -953,6 +953,37 @@ describe("in-turn timeline windows", () => {
     );
   });
 
+  it("keeps a finished turn whole when the budget floor lands on a thread-scoped row", () => {
+    const { db, thread } = setup();
+    const events: EventInput[] = [
+      ...turnEvents(thread, 1, 1),
+      ...commandBlock(thread, 4, "turn-1", "before", 300),
+    ];
+    for (let sequence = 604; sequence <= 713; sequence += 1) {
+      const taskId = `task-${sequence}`;
+      const task = JSON.parse(backgroundTaskData("pending")) as {
+        item: Record<string, unknown>;
+      };
+      events.push({
+        threadId: thread.id,
+        sequence,
+        type: "item/backgroundTask/progress",
+        scope: threadScope(),
+        providerThreadId,
+        itemId: taskId,
+        itemKind: "backgroundTask",
+        parentToolCallId: null,
+        data: JSON.stringify({ ...task, item: { ...task.item, id: taskId } }),
+      });
+    }
+    events.push(turnCompletedEvent(thread, 714, "turn-1"));
+    insertEvents(db, noopNotifier, events);
+
+    const budgeted = buildPage(db, thread, 100, null).response;
+
+    expect(budgeted.timelinePage.olderCursor?.anchorSeq).toBe(1);
+  });
+
   it("pages through a finished turn that exceeds the response byte budget", () => {
     const { db, thread } = setup();
     seedTurns(db, thread, {
@@ -3062,6 +3093,13 @@ function expectedOlderRowsSourceSeqEnd(
   );
 }
 
+function boundFromWindowStart(
+  bound: number | null,
+  windowStart: number,
+): number | null {
+  return bound !== null && bound >= windowStart ? bound : null;
+}
+
 describe("the older-row bound of a page that reads part of a turn", () => {
   it("closes a row left open before the window when its flat turn completes", () => {
     const { db, thread } = setup();
@@ -3119,76 +3157,6 @@ describe("the older-row bound of a page that reads part of a turn", () => {
     );
   });
 
-  it("counts a command row whose background task completes inside the window", () => {
-    const { db, thread } = setup();
-    const launcher = {
-      type: "commandExecution",
-      id: "launcher",
-      command: "pnpm test &",
-      cwd: "/tmp/test",
-      approvalStatus: null,
-    };
-    const task = {
-      type: "backgroundTask",
-      id: "launched-task",
-      taskType: "local_bash",
-      description: "pnpm test",
-      skipTranscript: false,
-      foreground: false,
-    };
-    const events: EventInput[] = [
-      ...turnEvents(thread, 1, 1),
-      ...commandBlock(thread, 4, "turn-1", "before", 300),
-      itemEvent(thread, 604, "item/started", "turn-1", {
-        ...launcher,
-        status: "pending",
-      }),
-      itemEvent(
-        thread,
-        605,
-        "item/started",
-        "turn-1",
-        { ...task, status: "pending", taskStatus: "running" },
-        "launcher",
-      ),
-      itemEvent(thread, 606, "item/completed", "turn-1", {
-        ...launcher,
-        status: "completed",
-        exitCode: 0,
-        aggregatedOutput: "started",
-      }),
-      ...steerEvents(thread, 607, 2, "turn-1"),
-      ...commandBlock(thread, 609, "turn-1", "after", 20),
-      {
-        ...itemEvent(
-          thread,
-          649,
-          "item/completed",
-          "turn-1",
-          { ...task, status: "completed", taskStatus: "completed" },
-          "launcher",
-        ),
-        type: "item/backgroundTask/completed",
-        scope: threadScope(),
-      },
-      turnCompletedEvent(thread, 650, "turn-1"),
-    ];
-    insertEvents(db, noopNotifier, events);
-
-    const latest = flatPage(db, thread, 100);
-    const allRows = flatPage(db, thread, LARGE_BUDGET).response.rows;
-
-    expect(latest.profile.eventRowCount).toBeLessThan(200);
-    expect(latest.response.timelinePage.olderRowsSourceSeqEnd).toBe(606);
-    expect(latest.response.timelinePage.olderRowsSourceSeqEnd).toBe(
-      expectedOlderRowsSourceSeqEnd(
-        allRows,
-        latest.response,
-        Number.MAX_SAFE_INTEGER,
-      ),
-    );
-  });
-
   it("leaves out a flat turn's item that is still running at the window start", () => {
     const { db, thread } = setup();
     const longCommand = {
@@ -3231,11 +3199,20 @@ describe("the older-row bound of a page that reads part of a turn", () => {
     expect(latest.response.timelinePage.olderRowUpdates).toEqual([
       expect.objectContaining({ id: `${thread.id}:command:long-command` }),
     ]);
-    expect(latest.response.timelinePage.olderRowsSourceSeqEnd).toBe(
-      expectedOlderRowsSourceSeqEnd(
-        allRows,
-        latest.response,
-        Number.MAX_SAFE_INTEGER,
+    const windowStart = latest.response.timelinePage.olderCursor!.anchorSeq;
+    expect(
+      boundFromWindowStart(
+        latest.response.timelinePage.olderRowsSourceSeqEnd,
+        windowStart,
+      ),
+    ).toBe(
+      boundFromWindowStart(
+        expectedOlderRowsSourceSeqEnd(
+          allRows,
+          latest.response,
+          Number.MAX_SAFE_INTEGER,
+        ),
+        windowStart,
       ),
     );
   });
