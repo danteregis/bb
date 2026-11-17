@@ -256,6 +256,7 @@ describe("readDefaultBranchRefs", () => {
       defaultBranch: "main",
       defaultBranchRelation: "equal",
       originDefaultBranch: "origin/main",
+      baseBranch: { ref: "origin/main", source: "origin" },
     });
   });
 
@@ -364,6 +365,7 @@ describe("readDefaultBranchRefs", () => {
       defaultBranch: "develop",
       defaultBranchRelation: undefined,
       originDefaultBranch: undefined,
+      baseBranch: { ref: "develop", source: "local" },
     });
   });
 
@@ -376,6 +378,7 @@ describe("readDefaultBranchRefs", () => {
       defaultBranch: "main",
       defaultBranchRelation: undefined,
       originDefaultBranch: undefined,
+      baseBranch: { ref: "main", source: "local" },
     });
   });
 });
