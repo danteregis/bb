@@ -76,6 +76,10 @@ export const QUERY_PLAN_ALLOWLIST: readonly QueryPlanAllowlistEntry[] = [
     "Runs once per delegation span and reads only the requests inside it; check:query-costs measures it",
   ),
   boundedCorrelatedEvents(
+    `${EVENTS}#isTimelineEventInCompletedTurn`,
+    "The outer search reads one event by the unique thread/sequence key, so the subquery runs once per page read and reads the thread's turn/completed rows, one per turn",
+  ),
+  boundedCorrelatedEvents(
     `${EVENTS}#listLatestTurnFinalAgentMessageEventRows`,
     "LIMIT keeps the outer rows to the newest replies, so each later-reply search covers only the newest turns; check:query-costs measures it",
   ),
